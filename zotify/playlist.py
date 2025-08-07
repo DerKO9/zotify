@@ -76,8 +76,8 @@ def download_playlist(playlist: dict, pbar_stack: list | None = None):
                 Printer.traceback(e)
                 m3u_dir = m3u_dir.parent # fallback to root path
         
-        m3u8_path = Path(m3u_dir / (playlist[NAME] + ".m3u8"))
-        old_m3u8_path = m3u8_path.with_suffix('.old.m3u8')
+        m3u8_path = Path(m3u_dir / ("Spotify:"+playlist[NAME].replace("/", "_") + ".m3u8"))
+        old_m3u8_path = m3u8_path.with_suffix('.m3u8.old')
         if m3u8_path.exists():
             # handle unfinished / interupted / old m3u8 files
             if old_m3u8_path.exists():
