@@ -1,5 +1,5 @@
 from __future__ import annotations
-__version__ = "0.9.0"
+__version__ = "0.9.13"
 
 from enum import IntEnum
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -26,9 +26,7 @@ from librespot.mercury import MercuryClient
 from librespot.proto import Authentication_pb2 as Authentication
 from pkce import generate_code_verifier, get_code_challenge
 from requests import HTTPError, get, post
-from logging import getLogger
-getLogger("Librespot:Session").disabled = True
-getLogger("Librespot:AudioKeyManager").disabled = True
+
 
 from zotify.const import AUTH_URL, BASE_URL, CLIENT_ID, SCOPES
 

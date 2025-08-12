@@ -10,19 +10,19 @@ from mutagen.id3 import TXXX
 from time import sleep
 from pathlib import Path, PurePath
 
+from zotify.config import Zotify
 from zotify.const import ALBUMARTIST, ARTIST, TRACKTITLE, ALBUM, YEAR, DISCNUMBER, TRACKNUMBER, ARTWORK, \
-    TOTALTRACKS, TOTALDISCS, EXT_MAP, LYRICS, COMPILATION, GENRE, EXT_MAP, MP3_TRACKID, M4A_TRACKID
-from zotify.zotify import Zotify
+    TOTALTRACKS, TOTALDISCS, EXT_MAP, LYRICS, COMPILATION, GENRE, EXT_MAP, MP3_CUSTOM_TAG_PREFIX, M4A_CUSTOM_TAG_PREFIX
 from zotify.termoutput import PrintChannel, Printer
 
 
 # Path Utils
-def create_download_directory(download_path: str | PurePath) -> None:
+def create_download_directory(dir_path: str | PurePath) -> None:
     """ Create directory and add a hidden file with song ids """
-    Path(download_path).mkdir(parents=True, exist_ok=True)
+    Path(dir_path).mkdir(parents=True, exist_ok=True)
     
     # add hidden file with song ids
-    hidden_file_path = PurePath(download_path).joinpath('.song_ids')
+    hidden_file_path = PurePath(dir_path).joinpath('.song_ids')
     if Zotify.CONFIG.get_disable_directory_archives():
         return
     if not Path(hidden_file_path).is_file():
@@ -185,7 +185,7 @@ def set_audio_tags(track_path: PurePath, track_metadata: dict, total_discs: str 
     if ext == "mp3":
         tags.mfile.tags.add(TXXX(encoding=3, desc='TRACKID', text=[scraped_track_id]))
     elif ext == "m4a":
-        freeform_set(tags, M4A_TRACKID,  type('tag', (object,), {'values': [scraped_track_id]})())
+        freeform_set(tags, M4A_CUSTOM_TAG_PREFIX + "trackid",  type('tag', (object,), {'values': [scraped_track_id]})())
     else:
         tags.tag_map["trackid"] = TAG_MAP_ENTRY(getter="trackid", setter="trackid", type=str)
         tags["trackid"] = scraped_track_id
@@ -222,11 +222,13 @@ def get_audio_tags(track_path: Path) -> tuple[tuple, tuple]:
     disc_number = str(tags[DISCNUMBER].val)
     track_number = str(tags[TRACKNUMBER].val).zfill(2)
     
-    unreliable_tags = ["trackid", TOTALTRACKS, TOTALDISCS, COMPILATION, LYRICS]
+    unreliable_tags = [TOTALTRACKS, TOTALDISCS, COMPILATION, LYRICS]
+    custom_tags = ["trackid"]
     if track_path.suffix.lower() == ".mp3":
-        unreliable_tags[0] = MP3_TRACKID
+        custom_tags = [MP3_CUSTOM_TAG_PREFIX + tag.upper() for tag in custom_tags]
     elif track_path.suffix.lower() == ".m4a":
-        unreliable_tags[0] = M4A_TRACKID
+        custom_tags = [M4A_CUSTOM_TAG_PREFIX + tag for tag in custom_tags]
+    unreliable_tags.extend(custom_tags)
     
     # Printer.debug(tags.mfile.tags.__dict__)
     tag_dict = dict(tags.mfile.tags)
@@ -245,10 +247,15 @@ def get_audio_tags(track_path: Path) -> tuple[tuple, tuple]:
             val = [line + "\n" for line in val.splitlines()]
         elif utag == COMPILATION:
             val = int(val)
-        elif utag == MP3_TRACKID:
-            val = val.text[0]
-        elif utag == M4A_TRACKID:
-            val = val[0].decode()
+        elif MP3_CUSTOM_TAG_PREFIX in utag:
+            val = val.text
+            if len(val) == 1:
+                val = val[0]
+        elif M4A_CUSTOM_TAG_PREFIX in utag:
+            if len(val) == 1:
+                val = val[0].decode()
+            else:
+                val = [v.decode() for v in val]
         else:
             val = val[0] if isinstance(val, (list, tuple)) and len(val) == 1 else val
             val = val if val else None

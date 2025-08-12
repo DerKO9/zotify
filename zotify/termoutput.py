@@ -115,30 +115,40 @@ class Printer:
         return category.value + msg
     
     @staticmethod
-    def new_print(channel: PrintChannel, msg: str, category: PrintCategory = PrintCategory.NONE, loader: bool = False, end: str = "\n") -> None:
+    def _toggle_active_loader(skip_toggle: bool = False):
+        global ACTIVE_LOADER
+        if not skip_toggle and ACTIVE_LOADER:
+            if ACTIVE_LOADER.paused:
+                ACTIVE_LOADER.resume()
+            else:
+                ACTIVE_LOADER.pause()
+    
+    @staticmethod
+    def new_print(channel: PrintChannel, msg: str, category: PrintCategory = PrintCategory.NONE, skip_toggle: bool = False, end: str = "\n") -> None:
         global LAST_PRINT
         if channel != PrintChannel.MANDATORY:
-            from zotify.zotify import Zotify
+            from zotify.config import Zotify
         if channel == PrintChannel.MANDATORY or Zotify.CONFIG.get(channel.value):
-            global ACTIVE_LOADER
-            if not loader and ACTIVE_LOADER:
-                ACTIVE_LOADER.pause()
             msg = Printer._print_prefixes(msg, category, channel)
-            for line in str(msg).splitlines():
+            if channel == PrintChannel.DEBUG and Zotify.CONFIG.logger:
+                Zotify.CONFIG.logger.debug(msg.strip().replace("DEBUG", "\n") + "\n")
+            Printer._toggle_active_loader(skip_toggle)
+            for line in str(msg).splitlines():   
                 if end == "\n": 
                     tqdm.write(line.ljust(Printer._term_cols()))
                 else:
                     tqdm.write(line, end=end)
                 LAST_PRINT = category
-            if not loader and ACTIVE_LOADER:
-                ACTIVE_LOADER.resume()
+            Printer._toggle_active_loader(skip_toggle)
     
     @staticmethod
     def get_input(prompt: str) -> str:
         user_input = ""
+        Printer._toggle_active_loader()
         while len(user_input) == 0:
-            Printer.new_print(PrintChannel.MANDATORY, prompt, PrintCategory.GENERAL, end="")
+            Printer.new_print(PrintChannel.MANDATORY, prompt, PrintCategory.GENERAL, end="", skip_toggle=True)
             user_input = str(input())
+        Printer._toggle_active_loader()
         return user_input
     
     # Print Wrappers
@@ -204,6 +214,10 @@ class Printer:
         "> SELECT A RANGE BY ADDING A DASH BETWEEN BOTH ID's\n" +
         "> OR PARTICULAR OPTIONS BY ADDING A COMMA BETWEEN ID's\n"
         )
+    
+    @staticmethod
+    def back_up() -> None:
+        Printer.new_print(PrintChannel.MANDATORY, UP_ONE_LINE, PrintCategory.GENERAL, end="")
     
     # Progress Bars
     @staticmethod
@@ -282,7 +296,7 @@ class Loader:
         self.dead = False
     
     def _loader_print(self, msg: str):
-        Printer.new_print(self.channel, msg, self.category, loader=True)
+        Printer.new_print(self.channel, msg, self.category, skip_toggle=True)
         
         if self.category is PrintCategory.LOADER:
             self.category = PrintCategory.LOADER_CYCLE

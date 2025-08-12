@@ -9,8 +9,8 @@ TOTALTRACKS = 'totaltracks'
 TRACKNUMBER = 'tracknumber'
 TRACKTITLE = 'tracktitle'
 YEAR = 'year'
-MP3_TRACKID = 'TXXX:TRACKID'
-M4A_TRACKID = '----:com.apple.iTunes:trackid'
+MP3_CUSTOM_TAG_PREFIX = 'TXXX:'
+M4A_CUSTOM_TAG_PREFIX = '----:com.apple.iTunes:'
 
 # Both
 ALBUM = 'album'
@@ -23,10 +23,14 @@ ADDED_BY = 'added_by'
 ALBUMS = 'albums'
 ALBUM_ARTISTS = 'album_artists'
 ALBUM_TYPE = 'album_type'
+AUDIO = 'audio'
 AVAIL_MARKETS = 'available_markets'
 ARTISTS = 'artists'
 ARTIST_IDS = 'artist_ids'
+AUDIOBOOK = 'audiobook'
+CHAPTERS = 'chapters'
 COLLABORATIVE = 'collaborative'
+DATA = 'data'
 DESCRIPTION = 'description'
 DISC_NUMBER = 'disc_number'
 DISPLAY_NAME = 'display_name'
@@ -61,6 +65,7 @@ PUBLIC = 'public'
 PUBLISHER = 'publisher'
 RELEASE_DATE = 'release_date'
 SHOW = 'show'
+SHOWS = 'shows'
 STARTTIMEMS = 'startTimeMs'
 SNAPSHOT_ID = 'snapshot_id'
 SYNCTYPE = 'syncType'
@@ -88,21 +93,23 @@ AUTH_URL = "https://accounts.sp" + "otify.com/"
 BASE_URL = 'https://api.sp' + 'otify.com/v1/'
 BULK_APPEND = 'ids='
 MARKET_APPEND = 'market=from_token'
-ALBUM_URL = BASE_URL + 'albums'
+ALBUM_URL = BASE_URL + ALBUMS
 ALBUM_BULK_URL = ALBUM_URL + '?' + BULK_APPEND
-ARTIST_URL = BASE_URL + 'artists'
+ARTIST_URL = BASE_URL + ARTISTS
 ARTIST_BULK_URL = ARTIST_URL + '?' + BULK_APPEND
-EPISODE_URL = BASE_URL + 'episodes'
-PLAYLIST_URL = BASE_URL + 'playlists'
+AUDIOBOOK_URL = BASE_URL + AUDIOBOOK
+CHAPTER_URL = BASE_URL + CHAPTERS
+EPISODE_URL = BASE_URL + EPISODES
+PLAYLIST_URL = BASE_URL + PLAYLISTS
 SEARCH_URL = BASE_URL + 'search'
-SHOW_URL = BASE_URL + 'shows'
-TRACK_URL = BASE_URL + 'tracks'
+SHOW_URL = BASE_URL + SHOWS
+TRACK_URL = BASE_URL + TRACKS
 TRACK_BULK_URL = TRACK_URL + '?' + BULK_APPEND
 TRACK_STATS_URL = BASE_URL + 'audio-features/'
 USER_URL = BASE_URL + 'me/'
-USER_FOLLOWED_ARTISTS_URL = USER_URL + 'following?type=artist'
-USER_PLAYLISTS_URL = USER_URL + 'playlists'
-USER_SAVED_TRACKS_URL = USER_URL + 'tracks'
+USER_FOLLOWED_ARTISTS_URL = USER_URL + 'following?type=' + ARTIST
+USER_PLAYLISTS_URL = USER_URL + PLAYLISTS
+USER_SAVED_TRACKS_URL = USER_URL + TRACKS
 LYRICS_URL = 'https://spclient.wg.sp' + 'otify.com/color-lyrics/v2/track/'
 PARTNER_URL = 'https://api-partner.sp' + 'otify.com/pathfinder/v1/query?operationName=getEpisode&variables={"uri":"sp' + 'otify:episode:'
 PERSISTED_QUERY = '{"persistedQuery":{"version":1,"sha256Hash":"224ba0fd89fcfdfb'+'3a15fa2d82a6112d'+'3f4e2ac88fba5c67'+'13de04d1b72cf482"}}'
