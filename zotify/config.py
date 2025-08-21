@@ -1,15 +1,18 @@
 import datetime
 import logging
 import json
+import base64
 import sys
 import re
 import requests
 from librespot.audio.decoders import VorbisOnlyAudioQuality
+from librespot.core import Session, OAuth
+from librespot.mercury import MercuryRequests
+from librespot.proto.Authentication_pb2 import AuthenticationType
 from pathlib import Path, PurePath
 from time import sleep
 from typing import Any, Callable
 
-from zotify import OAuth, Session
 from zotify.const import *
 from zotify.termoutput import Printer, PrintChannel, Loader
 
@@ -93,7 +96,6 @@ CONFIG_VALUES = {
     # API Options
     RETRY_ATTEMPTS:             { 'default': '1',                       'type': int,    'arg': ('--retry-attempts'                       ,) },
     CHUNK_SIZE:                 { 'default': '20000',                   'type': int,    'arg': ('--chunk-size'                           ,) },
-    OAUTH_ADDRESS:              { 'default': '0.0.0.0',                 'type': str,    'arg': ('--oauth-address'                        ,) },
     REDIRECT_ADDRESS:           { 'default': '127.0.0.1',               'type': str,    'arg': ('--redirect-address'                     ,) },
     
     # Terminal & Logging Options
@@ -117,6 +119,8 @@ DEPRECIATED_CONFIGS = {
     "SONG_ARCHIVE":               { 'default': '',                        'type': str,    'arg': ('--song-archive'                         ,) },
     "OVERRIDE_AUTO_WAIT":         { 'default': 'False',                   'type': bool,   'arg': ('--override-auto-wait'                   ,) },
     "REDIRECT_URI":               { 'default': '127.0.0.1:4381',          'type': str,    'arg': ('--redirect-uri'                         ,) },
+    "OAUTH_ADDRESS":              { 'default': '0.0.0.0',                 'type': str,    'arg': ('--oauth-address'                        ,) },
+    
 }
 
 
@@ -176,26 +180,19 @@ class Config:
                 full_config_path = full_config_path.parent / (full_config_path.stem + "_DEBUG.json")
             with open(full_config_path, 'w' if full_config_path.exists() else 'x', encoding='utf-8') as debug_file:
                 json.dump(cls.parse_config_jsonstr(), debug_file, indent=4)
-            Printer.hashtaged(PrintChannel.MANDATORY, f"{full_config_path.name} saved to {full_config_path.resolve().parent}")
+            real_debug = cls.Values[DEBUG]; cls.Values[DEBUG] = True
+            Printer.hashtaged(PrintChannel.DEBUG, f"{full_config_path.name} saved to {full_config_path.resolve().parent}")
+            cls.Values[DEBUG] = real_debug
         
         # Override config from commandline arguments
         for key in CONFIG_VALUES:
             if key.lower() in vars(args) and vars(args)[key.lower()] is not None:
                 cls.Values[key] = cls.parse_arg_value(key, vars(args)[key.lower()])
         
-        # Confirm regex patterns
-        if cls.get_regex_enabled():
-            for mode in ["Track", "Episode", "Album"]:
-                regex_method: Callable[[None], None | re.Pattern] = getattr(cls, f"get_regex_{mode.lower()}")
-                if regex_method(): Printer.hashtaged(PrintChannel.MANDATORY, f'{mode} Regex Filter:  r"{regex_method().pattern}"')
-        
-        # Check no-splash
-        if args.no_splash:
-            cls.Values[PRINT_SPLASH] = False
-        
         # Handle sub-library logging
-        if cls.Values[DEBUG]:
-            logfile = cls.get_root_path()/f"zotify_DEBUG_{Zotify.DATETIME_LAUNCH}.log"
+        if cls.debug():
+            logfile = Path(cls.get_root_path()/f"zotify_DEBUG_{Zotify.DATETIME_LAUNCH}.log")
+            Printer.hashtaged(PrintChannel.DEBUG, f"{logfile.name} logging to {logfile.resolve().parent}")
             logging.basicConfig(level=logging.DEBUG, filemode="x", filename=logfile)
             cls.logger = logging.getLogger("zotify.debug")
         else:
@@ -203,6 +200,16 @@ class Config:
             # mutedLoggers = {"Librespot:Session", "Librespot:AudioKeyManager", "librespot.audio", "Librespot:CdnManager"}
             # for logger in mutedLoggers:
             #     logging.getLogger(logger).disabled = True
+        
+        # Confirm regex patterns
+        if cls.get_regex_enabled():
+            for mode in ["Track", "Episode", "Album"]:
+                regex_method: Callable[[None], None | re.Pattern] = getattr(cls, f"get_regex_{mode.lower()}")
+                if regex_method(): Printer.hashtaged(PrintChannel.DEBUG, f'{mode} Regex Filter:  r"{regex_method().pattern}"')
+        
+        # Check no-splash
+        if args.no_splash:
+            cls.Values[PRINT_SPLASH] = False
     
     @classmethod
     def get_default_json(cls) -> dict:
@@ -517,8 +524,11 @@ class Config:
         return cls.get(DOWNLOAD_PARENT_ALBUM)
     
     @classmethod
-    def get_oauth_addresses(cls) -> tuple[str, str]:
-        return cls.get(REDIRECT_ADDRESS), cls.get(OAUTH_ADDRESS)
+    def get_oauth_address(cls) -> tuple[str, str]:
+        redirect_address = cls.get(REDIRECT_ADDRESS)
+        if redirect_address:
+            return redirect_address
+        return '127.0.0.1'
     
     @classmethod
     def get_skip_comp_albums(cls) -> bool:
@@ -570,28 +580,38 @@ class Zotify:
     @classmethod
     def login(cls, args):
         """ Authenticates and saves credentials to a file """
-        # Create session
-        if args.username not in {None, ""} and args.token not in {None, ""}:
-            oauth = OAuth(args.username, *cls.CONFIG.get_oauth_addresses())
-            oauth.set_token(args.token, OAuth.RequestType.REFRESH)
-            cls.SESSION = Session.from_oauth(
-                oauth, cls.CONFIG.get_credentials_location(), cls.CONFIG.get_language()
-            )
-        elif cls.CONFIG.get_credentials_location() and Path(cls.CONFIG.get_credentials_location()).exists():
-            cls.SESSION = Session.from_file(
-                cls.CONFIG.get_credentials_location(),
-                cls.CONFIG.get_language(),
-            )
+        
+        creds = cls.CONFIG.get_credentials_location()
+        if creds and Path(creds).exists():
+            cls.SESSION = Session.Builder().stored_file(creds).create()
+            return
+        
+        session_builder = Session.Builder() # stored_credentials_file == True by default
+        if creds:
+            session_builder.conf.stored_credentials_file = str(creds)
         else:
-            username = args.username
-            if not username:
-                username = Printer.get_input("Username: ")
-            oauth = OAuth(username, *cls.CONFIG.get_oauth_addresses())
-            auth_url = oauth.auth_interactive()
-            Printer.new_print(PrintChannel.MANDATORY, f"Click on the following link to login:\n{auth_url}")
-            cls.SESSION = Session.from_oauth(
-                oauth, cls.CONFIG.get_credentials_location(), cls.CONFIG.get_language()
-            )
+            session_builder.conf.store_credentials = False
+            session_builder.conf.stored_credentials_file = ""
+        
+        if args.username not in {None, ""} and args.token not in {None, ""}:
+            try:
+                auth_obj = {"username": args.username,
+                            "credentials": args.token,
+                            "type": AuthenticationType.keys()[1]}
+                auth_as_bytes = base64.b64encode(json.dumps(auth_obj, ensure_ascii=True).encode("ascii"))
+                cls.SESSION = session_builder.stored(auth_as_bytes).create()
+                return
+            except:
+                Printer.hashtaged(PrintChannel.MANDATORY, f"Login via commandline args failed! Falling back to interactive login")
+        
+        def oauth_print(url):
+            Printer.new_print(PrintChannel.MANDATORY, f"Click on the following link to login:\n{url}")
+        
+        port = 4381
+        redirect_url = f"http://{cls.CONFIG.get_oauth_address()}:{port}/login"
+        session_builder.login_credentials = OAuth(MercuryRequests.keymaster_client_id, redirect_url, oauth_print).flow()
+        cls.SESSION = session_builder.create()
+        return
     
     @classmethod
     def get_content_stream(cls, content_id, quality):
