@@ -1405,7 +1405,7 @@ class Query(Container):
                                                              "NO CONTENT WITH VALID FILEPATHS FOUND")
                     continue
                 
-                m3u8_path = m3u8_dir / (get_m3u8_filename(content_list) + ".m3u8")
+                m3u8_path = m3u8_dir / ("Spotify_" + get_m3u8_filename(content_list) + ".m3u8")
                 Path(m3u8_path).unlink(missing_ok=True)
                 add_to_m3u8(m3u8_path, content_list, append)
     
@@ -1500,7 +1500,7 @@ class LikedSongs(Query):
                 return
             
             liked_tracks: list[Track] = self.requested_objs[0]
-            m3u8_path = self.get_m3u8_dir(liked_tracks) / f"{self.name}.m3u8"
+            m3u8_path = self.get_m3u8_dir(liked_tracks) / f"Spotify_{self.name}.m3u8"
             
             if not Path(m3u8_path).exists():
                 return
